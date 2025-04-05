@@ -20,14 +20,16 @@ fn main() -> Result<()> {
         esp_idf_svc::wifi::ClientConfiguration::default(),
     )));
     state.push_incoming(CalcRequest::Wifi(WifiActions::Start));
-    state.push_incoming(CalcRequest::Wifi(WifiActions::Scan));
 
     while state.is_processing() {
+        state.read_incoming();
+
         state.try_process_incoming();
 
-        let res = state.poll_processing();
-        println!("Response: {:?}", res);
-        delay::Ets::delay_ms(500);
+        state.try_send_processing();
+        // let res = state.poll_processing();
+        // println!("Response: {:?}", res);
+        delay::Ets::delay_ms(100);
     }
 
     Ok(())

@@ -11,7 +11,7 @@ pub trait Deserialise: Sized {
 impl<T: Serialise + Sized> Serialise for Vec<T> {
     fn to_bytes(&self) -> Vec<u8> {
         let mut v = vec![self.len() as u8];
-        v.extend(self.iter().map(Serialise::to_bytes).flatten());
+        v.extend(self.iter().flat_map(Serialise::to_bytes));
 
         v
     }

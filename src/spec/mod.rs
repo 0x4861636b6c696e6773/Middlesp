@@ -2,11 +2,12 @@ use esp_idf_svc::{
     io::Read,
     wifi::{AuthMethod, ClientConfiguration, PmfConfiguration},
 };
-use serialise::{Deserialise, Serialise};
 use wifi::{WifiActions, WifiResponse};
 
 mod serialise;
 pub mod wifi;
+
+pub use serialise::{Deserialise, Serialise};
 
 #[derive(Debug, Clone)]
 pub enum CalcRequest {

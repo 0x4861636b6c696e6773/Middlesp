@@ -3,17 +3,23 @@ use std::{collections::VecDeque, future::poll_fn, task::Poll};
 use anyhow::Result;
 use esp_idf_svc::{
     eventloop::EspSystemEventLoop,
-    hal::prelude::Peripherals,
+    hal::{
+        gpio,
+        prelude::Peripherals,
+        uart::{config, UartDriver},
+        units::Hertz,
+    },
     nvs::EspDefaultNvsPartition,
     timer::EspTaskTimerService,
     wifi::{AsyncWifi, EspWifi},
 };
 use futures::{executor, future::BoxFuture, FutureExt};
 
-use crate::spec::{CalcRequest, CalcResponse};
+use crate::spec::{CalcRequest, CalcResponse, Deserialise, Serialise};
 
 pub struct State {
     pub wifi: *mut AsyncWifi<EspWifi<'static>>,
+    pub uart: *mut UartDriver<'static>,
     processing: Option<BoxFuture<'static, CalcResponse>>,
     incoming: VecDeque<CalcRequest>,
 }
@@ -27,12 +33,45 @@ impl State {
         let wifi = EspWifi::new(peripherals.modem, sysloop.clone(), Some(nvs))?;
         let timer_service = EspTaskTimerService::new()?;
 
+        let tx = peripherals.pins.gpio5;
+        let rx = peripherals.pins.gpio6;
+
+        let config = config::Config::new().baudrate(Hertz(115_200));
+        let uart = UartDriver::new(
+            peripherals.uart1,
+            tx,
+            rx,
+            Option::<gpio::Gpio0>::None,
+            Option::<gpio::Gpio1>::None,
+            &config,
+        )
+        .unwrap();
+
         Ok(Self {
+            uart: Box::into_raw(Box::new(uart)),
             // Drop is implemented in and so this is safe :)
             wifi: Box::into_raw(Box::new(AsyncWifi::wrap(wifi, sysloop, timer_service)?)),
             processing: None,
             incoming: VecDeque::new(),
         })
+    }
+
+    pub fn uart(&mut self) -> &mut UartDriver<'static> {
+        unsafe { self.uart.as_mut().unwrap() }
+    }
+
+    pub fn wifi(&mut self) -> &mut AsyncWifi<EspWifi<'static>> {
+        unsafe { self.wifi.as_mut().unwrap() }
+    }
+
+    pub fn read_incoming(&mut self) {
+        match CalcRequest::from_bytes(self.uart()) {
+            Ok(res) => {
+                println!("Receieved: {res:?}");
+                self.push_incoming(res);
+            }
+            Err(e) => println!("Failed to get buf: {e:?}"),
+        }
     }
 
     pub fn push_incoming(&mut self, req: CalcRequest) {
@@ -52,6 +91,7 @@ impl State {
                     .run_on(unsafe { wifi.as_mut().unwrap() })
                     .map(CalcResponse::Wifi)
                     .boxed(),
+                CalcRequest::Unknown => panic!("Unknown state"),
             };
 
             self.processing = Some(resp);
@@ -77,6 +117,23 @@ impl State {
         }
     }
 
+    pub fn try_send_processing(&mut self) {
+        if let Some(resp) = self.poll_processing() {
+            println!("Sending: {resp:?}");
+
+            let buf = resp.to_bytes();
+            match self.uart().write(&buf) {
+                Ok(size) if size != buf.len() => {
+                    println!("Only write {size} bytes when expected {}", buf.len());
+                }
+                Err(e) => {
+                    println!("Error when writing to stream: {e:?}")
+                }
+                _ => {} // Everything is fine with the world
+            }
+        }
+    }
+
     pub fn is_processing(&self) -> bool {
         self.processing.is_some() || !self.incoming.is_empty()
     }
@@ -85,5 +142,6 @@ impl State {
 impl Drop for State {
     fn drop(&mut self) {
         let _box = unsafe { Box::from_raw(self.wifi) };
+        let _box = unsafe { Box::from_raw(self.uart) };
     }
 }
