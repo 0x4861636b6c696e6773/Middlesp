@@ -1,7 +1,7 @@
 use esp_idf_svc::{io::Read, wifi::AccessPointInfo};
 
 pub trait Serialise {
-    fn to_bytes(&self) -> Vec<u8>;
+    fn to_bytes(self) -> Vec<u8>;
 }
 
 pub trait Deserialise: Sized {
@@ -9,9 +9,9 @@ pub trait Deserialise: Sized {
 }
 
 impl<T: Serialise + Sized> Serialise for Vec<T> {
-    fn to_bytes(&self) -> Vec<u8> {
+    fn to_bytes(self) -> Vec<u8> {
         let mut v = vec![self.len() as u8];
-        v.extend(self.iter().flat_map(Serialise::to_bytes));
+        v.extend(self.into_iter().flat_map(Serialise::to_bytes));
 
         v
     }

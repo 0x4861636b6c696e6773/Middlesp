@@ -129,7 +129,7 @@ impl WifiResponse {
 }
 
 impl Serialise for WifiResponse {
-    fn to_bytes(&self) -> Vec<u8> {
+    fn to_bytes(self) -> Vec<u8> {
         let mut v = vec![self.id()];
         match self {
             Self::Error(code) => v.extend(code.to_be_bytes()),

@@ -6,6 +6,10 @@ use state::State;
 pub mod spec;
 pub mod state;
 
+/// NOTE: It seems we can actually use two threads (and make this a bunch
+/// nicer with having one thread on reading incoming and the other just waiting
+/// on the wifi requests: https://esp32.implrust.com/wifi/embassy/http-request.html)
+///
 /// This is the main function :)
 fn main() -> Result<()> {
     // It is necessary to call this function once. Otherwise some patches to the runtime

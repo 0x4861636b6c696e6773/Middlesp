@@ -20,3 +20,13 @@ Literally plug the ESP32 into a usb port and run:
 ```sh
 cargo run --release
 ```
+
+## Connecting to Serial
+
+Pins configuration can be found in [`state.rs`](./src/state.rs), in `new`,
+key lines are:
+
+```rs
+let tx = peripherals.pins.gpio5;
+let rx = peripherals.pins.gpio6;
+```

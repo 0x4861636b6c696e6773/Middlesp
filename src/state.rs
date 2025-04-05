@@ -1,6 +1,10 @@
 use std::{collections::VecDeque, future::poll_fn, task::Poll};
 
 use anyhow::Result;
+use embassy_net::{
+    dns::DnsSocket,
+    tcp::client::{TcpClient, TcpClientState},
+};
 use esp_idf_svc::{
     eventloop::EspSystemEventLoop,
     hal::{
@@ -14,12 +18,14 @@ use esp_idf_svc::{
     wifi::{AsyncWifi, EspWifi},
 };
 use futures::{executor, future::BoxFuture, FutureExt};
+use reqwless::client::{HttpClient, TlsConfig};
 
 use crate::spec::{CalcRequest, CalcResponse, Deserialise, Serialise};
 
 pub struct State {
-    pub wifi: *mut AsyncWifi<EspWifi<'static>>,
-    pub uart: *mut UartDriver<'static>,
+    wifi: *mut AsyncWifi<EspWifi<'static>>,
+    uart: *mut UartDriver<'static>,
+    http: *mut HttpClient<'static>,
     processing: Option<BoxFuture<'static, CalcResponse>>,
     incoming: VecDeque<CalcRequest>,
 }
@@ -33,6 +39,7 @@ impl State {
         let wifi = EspWifi::new(peripherals.modem, sysloop.clone(), Some(nvs))?;
         let timer_service = EspTaskTimerService::new()?;
 
+        // Create uart (Serial interaction)
         let tx = peripherals.pins.gpio5;
         let rx = peripherals.pins.gpio6;
 
@@ -47,10 +54,30 @@ impl State {
         )
         .unwrap();
 
+        // Create http client
+        // TODO: following: https://esp32.implrust.com/wifi/embassy/http-request.html
+        // But i don't think including the esp-hal package (which has Rng is a good idea)
+        let tls_seed = rng.random() as u64 | ((rng.random() as u64) << 32);
+        let mut rx_buffer = [0; 4096];
+        let mut tx_buffer = [0; 4096];
+        let dns = DnsSocket::new(&stack);
+        let tcp_state = TcpClientState::<1, 4096, 4096>::new();
+        let tcp = TcpClient::new(stack, &tcp_state);
+
+        let tls = TlsConfig::new(
+            tls_seed,
+            &mut rx_buffer,
+            &mut tx_buffer,
+            reqwless::client::TlsVerify::None,
+        );
+
+        let mut client = HttpClient::new_with_tls(&tcp, &dns, tls);
+
         Ok(Self {
             uart: Box::into_raw(Box::new(uart)),
             // Drop is implemented in and so this is safe :)
             wifi: Box::into_raw(Box::new(AsyncWifi::wrap(wifi, sysloop, timer_service)?)),
+            http: Box::into_raw(Box::new(client)),
             processing: None,
             incoming: VecDeque::new(),
         })
@@ -62,6 +89,10 @@ impl State {
 
     pub fn wifi(&mut self) -> &mut AsyncWifi<EspWifi<'static>> {
         unsafe { self.wifi.as_mut().unwrap() }
+    }
+
+    pub fn http(&mut self) -> &mut HttpClient<'static> {
+        unsafe { self.http.as_mut().unwrap() }
     }
 
     pub fn read_incoming(&mut self) {
@@ -143,5 +174,6 @@ impl Drop for State {
     fn drop(&mut self) {
         let _box = unsafe { Box::from_raw(self.wifi) };
         let _box = unsafe { Box::from_raw(self.uart) };
+        let _box = unsafe { Box::from_raw(self.http) };
     }
 }

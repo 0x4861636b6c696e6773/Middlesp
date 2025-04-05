@@ -2,8 +2,10 @@ use esp_idf_svc::{
     io::Read,
     wifi::{AuthMethod, ClientConfiguration, PmfConfiguration},
 };
+use http::{HttpReq, HttpResp};
 use wifi::{WifiActions, WifiResponse};
 
+mod http;
 mod serialise;
 pub mod wifi;
 
@@ -12,6 +14,7 @@ pub use serialise::{Deserialise, Serialise};
 #[derive(Debug, Clone)]
 pub enum CalcRequest {
     Wifi(WifiActions),
+    Http(HttpReq),
     Unknown,
 }
 
@@ -25,6 +28,7 @@ impl Deserialise for CalcRequest {
 
         Ok(match buf[0] {
             0 => Self::Wifi(WifiActions::from_bytes(src)?),
+            1 => Self::Wifi(HttpReq::from_bytes(src)?),
             _ => Self::Unknown,
         })
     }
@@ -83,18 +87,21 @@ impl Deserialise for ClientConfiguration {
 #[derive(Debug)]
 pub enum CalcResponse {
     Wifi(WifiResponse),
+    Http(HttpResp),
 }
 
 impl CalcResponse {
     pub const fn id(&self) -> u8 {
         match self {
             Self::Wifi(_) => 0,
+            Self::Http(_) => 1,
         }
     }
 
     fn serialise_child(&self) -> Vec<u8> {
         match self {
             Self::Wifi(resp) => resp.to_bytes(),
+            Self::Http(resp) => resp.to_bytes(),
         }
     }
 }
