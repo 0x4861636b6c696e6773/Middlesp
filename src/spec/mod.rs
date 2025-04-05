@@ -3,7 +3,7 @@ use wifi::{WifiActions, WifiResponse};
 
 pub mod wifi;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum CalcRequest {
     Wifi(WifiActions),
 }

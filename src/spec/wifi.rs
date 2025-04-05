@@ -9,7 +9,7 @@ use esp_idf_svc::{
 use futures::{future::BoxFuture, FutureExt};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum WifiActions {
     /// [esp_idf_svc::wifi::AsyncWifi::is_started]
     IsStarted,
@@ -29,7 +29,6 @@ pub enum WifiActions {
     Disconnect,
     /// [esp_idf_svc::wifi::AsyncWifi::set_configuration]
     SetConfig(ClientConfiguration),
-    WaitTillStart,
 }
 
 impl WifiActions {
@@ -45,16 +44,8 @@ impl WifiActions {
             Self::GetCapabilities => {
                 future::ready(wifi.get_capabilities().into_resp_or(WifiResponse::Started)).boxed()
             }
-            Self::Start => {
-                future::ready(wifi.is_connected().into_resp_or(WifiResponse::Started)).boxed()
-            }
-            Self::Stop => {
-                future::ready(wifi.is_connected().into_resp_or(WifiResponse::Stopped)).boxed()
-            }
-            Self::WaitTillStart => wifi
-                .wifi_wait(|this| this.is_started(), None)
-                .into_resp_or(WifiResponse::Started)
-                .boxed(),
+            Self::Start => wifi.start().into_resp_or(WifiResponse::Started).boxed(),
+            Self::Stop => wifi.stop().into_resp_or(WifiResponse::Stopped).boxed(),
             Self::Connect => wifi.connect().into_resp_or(WifiResponse::Connected).boxed(),
             Self::Disconnect => wifi
                 .disconnect()

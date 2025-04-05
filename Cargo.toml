@@ -13,6 +13,15 @@ harness = false   # do not use the built in cargo test harness -> resolve rust-a
 [profile.release]
 opt-level = "s"
 
+debug = false
+debug-assertions = false
+overflow-checks = false
+lto = false
+panic = 'unwind'
+incremental = false
+codegen-units = 16
+rpath = false
+
 [profile.dev]
 debug = true    # Symbols are nice and they don't increase the size on Flash
 opt-level = "z"

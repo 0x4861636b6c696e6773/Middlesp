@@ -20,7 +20,6 @@ fn main() -> Result<()> {
         esp_idf_svc::wifi::ClientConfiguration::default(),
     )));
     state.push_incoming(CalcRequest::Wifi(WifiActions::Start));
-    state.push_incoming(CalcRequest::Wifi(WifiActions::WaitTillStart));
     state.push_incoming(CalcRequest::Wifi(WifiActions::Scan));
 
     while state.is_processing() {
