@@ -7,9 +7,10 @@ use esp_idf_svc::{
     wifi::{AccessPointInfo, AsyncWifi, Capability, EspWifi},
 };
 use futures::{future::BoxFuture, FutureExt};
-use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+use super::serialise::{Deserialise, Serialise};
+
+#[derive(Debug, Clone)]
 pub enum WifiActions {
     /// [esp_idf_svc::wifi::AsyncWifi::is_started]
     IsStarted,
@@ -29,6 +30,7 @@ pub enum WifiActions {
     Disconnect,
     /// [esp_idf_svc::wifi::AsyncWifi::set_configuration]
     SetConfig(ClientConfiguration),
+    Unknown,
 }
 
 impl WifiActions {
@@ -56,16 +58,41 @@ impl WifiActions {
                     .into_resp_or(WifiResponse::Configured),
             )
             .boxed(),
+            Self::Unknown => panic!("Unknown state was given"),
         }
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+impl Deserialise for WifiActions {
+    fn from_bytes<R: esp_idf_svc::io::Read>(src: &mut R) -> Result<Self, R::Error> {
+        let mut buf: [u8; 1] = [0];
+        let size = src.read(&mut buf)?;
+
+        if size == 0 {
+            return Ok(Self::Unknown);
+        }
+
+        Ok(match buf[0] {
+            0 => Self::IsStarted,
+            1 => Self::IsConnected,
+            2 => Self::GetCapabilities,
+            3 => Self::Start,
+            4 => Self::Stop,
+            5 => Self::Scan,
+            6 => Self::Connect,
+            7 => Self::Disconnect,
+            8 => Self::SetConfig(ClientConfiguration::from_bytes(src)?),
+            _ => Self::Unknown,
+        })
+    }
+}
+
+#[derive(Debug)]
 pub enum HttpActions {
     Send,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug)]
 pub enum WifiResponse {
     Error(i32),
     IsStarted(bool),
@@ -83,6 +110,36 @@ impl WifiResponse {
     #[inline]
     pub fn new_error(err: EspError) -> Self {
         Self::Error(err.code())
+    }
+
+    pub const fn id(&self) -> u8 {
+        match self {
+            Self::Error(_) => 0,
+            Self::IsStarted(_) => 1,
+            Self::IsConnected(_) => 2,
+            Self::AccessPoints(_) => 3,
+            Self::Capabilities(_) => 4,
+            Self::Started => 5,
+            Self::Stopped => 6,
+            Self::Connected => 7,
+            Self::Disconnected => 8,
+            Self::Configured => 9,
+        }
+    }
+}
+
+impl Serialise for WifiResponse {
+    fn to_bytes(&self) -> Vec<u8> {
+        let mut v = vec![self.id()];
+        match self {
+            Self::Error(code) => v.extend(code.to_be_bytes()),
+            Self::IsStarted(res) | Self::IsConnected(res) => v.push(*res as u8),
+            Self::AccessPoints(points) => v.extend(points.to_bytes()),
+            Self::Capabilities(caps) => v.push(caps.as_u8()),
+            _ => {}
+        }
+
+        v
     }
 }
 
