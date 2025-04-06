@@ -3,6 +3,7 @@ use esp_idf_svc::hal::delay;
 use spec::{wifi::WifiActions, CalcRequest};
 use state::State;
 
+mod safe_read;
 pub mod spec;
 pub mod state;
 

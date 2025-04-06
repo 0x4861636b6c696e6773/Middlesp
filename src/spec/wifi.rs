@@ -9,6 +9,7 @@ use esp_idf_svc::{
 use futures::{future::BoxFuture, FutureExt};
 
 use super::serialise::{Deserialise, Serialise};
+use crate::safe_read::SafeRead;
 
 #[derive(Debug, Clone)]
 pub enum WifiActions {
@@ -64,15 +65,9 @@ impl WifiActions {
 }
 
 impl Deserialise for WifiActions {
-    fn from_bytes<R: esp_idf_svc::io::Read>(src: &mut R) -> Result<Self, R::Error> {
-        let mut buf: [u8; 1] = [0];
-        let size = src.read(&mut buf)?;
-
-        if size == 0 {
-            return Ok(Self::Unknown);
-        }
-
-        Ok(match buf[0] {
+    fn from_bytes<R: esp_idf_svc::io::Read>(src: &mut R) -> anyhow::Result<Self> {
+        let id = src.try_next()?;
+        Ok(match id {
             0 => Self::IsStarted,
             1 => Self::IsConnected,
             2 => Self::GetCapabilities,
@@ -133,7 +128,7 @@ impl Serialise for WifiResponse {
         let mut v = vec![self.id()];
         match self {
             Self::Error(code) => v.extend(code.to_be_bytes()),
-            Self::IsStarted(res) | Self::IsConnected(res) => v.push(*res as u8),
+            Self::IsStarted(res) | Self::IsConnected(res) => v.push(res as u8),
             Self::AccessPoints(points) => v.extend(points.to_bytes()),
             Self::Capabilities(caps) => v.push(caps.as_u8()),
             _ => {}
