@@ -29,7 +29,7 @@ pub enum MethodWithArgs {
     Delete,
     Get,
     Head(Headers),
-    Post(Headers),
+    Post(Headers, String),
     Put(Headers),
 }
 
@@ -42,7 +42,7 @@ impl MethodWithArgs {
         // Bit confusing but we need to get the lifetimes correct
         let headers = self.headers();
 
-        let request = match self {
+        let request = match &self {
             Self::Delete => {
                 println!("-> DELETE {uri}");
                 client.delete(uri)
@@ -55,9 +55,15 @@ impl MethodWithArgs {
                 println!("-> HEAD {uri}");
                 client.request(Method::Head, uri, headers.as_ref().unwrap())
             }
-            Self::Post(_) => {
+            Self::Post(_, payload) => {
                 println!("-> POST {uri}");
-                client.post(uri, headers.as_ref().unwrap())
+                client
+                    .post(uri, headers.as_ref().unwrap())
+                    .and_then(|mut req| {
+                        req.write(payload.as_bytes())?;
+
+                        Ok(req)
+                    })
             }
             Self::Put(_) => {
                 println!("-> PUT {uri}");
@@ -77,7 +83,7 @@ impl MethodWithArgs {
     fn headers(&self) -> Option<Vec<(&str, &str)>> {
         match self {
             Self::Delete | Self::Get => None,
-            Self::Put(h) | Self::Head(h) | Self::Post(h) => Some(h.as_full_ref()),
+            Self::Put(h) | Self::Head(h) | Self::Post(h, _) => Some(h.as_full_ref()),
         }
     }
 }
@@ -88,7 +94,7 @@ impl Deserialise for MethodWithArgs {
             0 => Self::Delete,
             1 => Self::Get,
             2 => Self::Head(Headers::from_bytes(src)?),
-            3 => Self::Post(Headers::from_bytes(src)?),
+            3 => Self::Post(Headers::from_bytes(src)?, String::from_bytes(src)?),
             4 => Self::Put(Headers::from_bytes(src)?),
             i => bail!("Unknown id: {i} when trying to decode MethodWithArgs"),
         })
